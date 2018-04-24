@@ -14,7 +14,7 @@ import osp.Utilities.*;
 import osp.Hardware.*;
 import osp.Memory.*;
 import osp.FileSys.*;
-import osp.Tasks.*;
+
 import java.util.*;
 
 public class Device extends IflDevice
@@ -29,10 +29,23 @@ public class Device extends IflDevice
 
         @OSPProject Devices
     */
+    private ArrayList<IORBQueue> queueList;
+    private int currentUsingQueueIndex;
+    private int currentOpenQueueIndex;
+    private static int lastCylinder;
+
     public Device(int id, int numberOfBlocks)
     {
         // your code goes here
+        super(id,numberOfBlocks);
+        //this.iorbQueue = new GenericList();
+        currentOpenQueueIndex =0;
+        currentUsingQueueIndex =0;
 
+        queueList = new ArrayList<>(4);
+        for (int i=0; i<4; i++){
+            queueList.add(new IORBQueue());
+        }
     }
 
     /**
@@ -44,7 +57,7 @@ public class Device extends IflDevice
     public static void init()
     {
         // your code goes here
-
+        lastCylinder = 0;
     }
 
     /**
@@ -68,6 +81,58 @@ public class Device extends IflDevice
     {
         // your code goes here
 
+        //preparation work
+        PageTableEntry pageTableEntry = iorb.getPage();
+        int locked = pageTableEntry.lock(iorb);
+        if (locked != SUCCESS){
+            return FAILURE;
+        }
+
+        OpenFile openFile = iorb.getOpenFile();
+        openFile.incrementIORBCount();
+        ThreadCB threadCB = iorb.getThread();
+
+        //setting cylinder, a track consist of blocks, which contains sectors.
+        int cylinder_index = getCylinderNumber(iorb.getBlockNumber(), (Disk)this);
+        iorb.setCylinder(cylinder_index);
+
+
+        if (threadCB.getStatus() == ThreadKill /*22*/){
+            return FAILURE;
+        }
+
+
+        if (!this.isBusy()){ // when disk is idle
+            this.startIO(iorb);
+            lastCylinder = iorb.getCylinder();
+            return SUCCESS;
+        }
+
+        //If the device is busy
+        if (threadCB.getStatus() != ThreadKill) {
+           // ((GenericList) iorbQueue).append(iorb);
+            IORBQueue currentOpenIORBQueue = null;
+            //looking for open queue.
+            for (int i=currentOpenQueueIndex; i< queueList.size(); i++){
+                IORBQueue temp = queueList.get(i);
+                if (temp.isOpen()){
+                    currentOpenIORBQueue = temp;
+                    currentOpenQueueIndex=i;
+                    break;
+                }
+            }
+            if (currentOpenIORBQueue == null){
+                currentOpenIORBQueue = new IORBQueue();
+                queueList.add(currentOpenIORBQueue);
+                currentOpenQueueIndex++;
+            }
+
+            currentOpenIORBQueue.append(iorb);
+
+        }
+
+        return SUCCESS;
+
     }
 
     /**
@@ -79,6 +144,34 @@ public class Device extends IflDevice
     public IORB do_dequeueIORB()
     {
         // your code goes here
+        //picking the current using queue.
+        IORBQueue currentUsingQueue = null;
+
+        for (int i=currentUsingQueueIndex; i< queueList.size(); i++){
+            IORBQueue temp = queueList.get(i);
+            if (!temp.isEmpty()){
+                currentUsingQueue = temp;
+                currentUsingQueueIndex = i;
+                break;
+            }
+        }
+
+        if (currentUsingQueue == null){
+            return null;
+        }
+
+        //getting IORB from current
+        int selected = 0;
+        for (int i=0; i<currentUsingQueue.length(); i++){
+            IORB current = (IORB) currentUsingQueue.getAt(i);
+            IORB slectedIORB = (IORB) currentUsingQueue.getAt(selected);
+            //(current.getCylinder()-lastCylinder)*Disk.getSeekTimePerCylinder gives the seek time, use math, seekTimePercylinder can be ignored when
+            //we only care who's smaller.
+            if (Math.abs(current.getCylinder()-lastCylinder) < Math.abs(slectedIORB.getCylinder()-lastCylinder)){
+                selected = i;
+            }
+        }
+
 
     }
 
@@ -127,13 +220,45 @@ public class Device extends IflDevice
 
     }
 
+    public int getCylinderNumber(int blockNumber, Disk disk){
+        int block_size = (int) Math.pow(2, MMU.getVirtualAddressBits() - MMU.getPageAddressBits());//also page_size
+        int sector_size = disk.getBytesPerSector();
+        int sectors_per_track = disk.getSectorsPerTrack();
+        int track_size = sector_size*sectors_per_track;
+        int blocks_per_track = track_size/block_size;
+        int blocks_per_cylinder = blocks_per_track*disk.getPlatters();
+        //getPlatters returns the number of platters in the disk, = the number of tracks in a cylinder in OSP 2(one side).
+        return blockNumber/blocks_per_cylinder;
+    }
+
 
     /*
        Feel free to add methods/fields to improve the readability of your code
     */
+
+
 
 }
 
 /*
       Feel free to add local classes to improve the readability of your code
 */
+class IORBQueue extends GenericList{
+    private boolean open;
+    IORBQueue(){
+        super();
+        open = true;
+    }
+
+    public void close(){
+        open = false;
+    }
+
+    public void open(){
+        open = true;
+    }
+
+    public boolean isOpen(){
+        return open;
+    }
+}
