@@ -40,7 +40,7 @@ public class Device extends IflDevice
     {
         // your code goes here
         super(id,numberOfBlocks);
-        //this.iorbQueue = new GenericList();
+        this.iorbQueue = new GenericList(); //not really use
         currentOpenQueueIndex =0;
         currentUsingQueueIndex =0;
 
@@ -226,6 +226,7 @@ public class Device extends IflDevice
     public void do_cancelPendingIO(ThreadCB thread)
     {
         // your code goes here
+        MyOut.print(queueList, "do_cancelPendingIO: QueueList is "+queueList);
         int count=0;
         for (count=0; count<queueList.size(); count++){
             if (!queueList.get(count).isEmpty()){
