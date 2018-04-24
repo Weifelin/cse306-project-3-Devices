@@ -16,6 +16,7 @@ import osp.Memory.*;
 import osp.FileSys.*;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Device extends IflDevice
 {
@@ -33,6 +34,7 @@ public class Device extends IflDevice
     private int currentUsingQueueIndex;
     private int currentOpenQueueIndex;
     private static int lastCylinder;
+    private static ConcurrentHashMap<ThreadCB,Vector<IORB>> iorb_by_thread_list; // for cancelling iorb for thread.
 
     public Device(int id, int numberOfBlocks)
     {
@@ -58,6 +60,7 @@ public class Device extends IflDevice
     {
         // your code goes here
         lastCylinder = 0;
+        iorb_by_thread_list = new ConcurrentHashMap<>();
     }
 
     /**
@@ -129,6 +132,15 @@ public class Device extends IflDevice
 
             currentOpenIORBQueue.append(iorb);
 
+            //keep track of iorb for each thread.
+            if (iorb_by_thread_list.get(iorb.getThread())==null){
+                Vector<IORB> vector = new Vector<>();
+                vector.addElement(iorb);
+                iorb_by_thread_list.put(iorb.getThread(), vector);
+            }else {
+                iorb_by_thread_list.get(iorb.getThread()).addElement(iorb);
+            }
+
         }
 
         return SUCCESS;
@@ -170,8 +182,31 @@ public class Device extends IflDevice
             if (Math.abs(current.getCylinder()-lastCylinder) < Math.abs(slectedIORB.getCylinder()-lastCylinder)){
                 selected = i;
             }
+
         }
 
+        IORB iorb = (IORB) currentUsingQueue.getAt(selected);
+        currentUsingQueue.remove(iorb);
+        lastCylinder = iorb.getCylinder();
+        currentUsingQueue.close();
+        currentOpenQueueIndex++;
+
+
+        //remove the iorb from list
+        try{
+            iorb_by_thread_list.get(iorb.getThread()).remove(iorb);
+        } catch (NullPointerException e){
+            MyOut.print(iorb_by_thread_list, "Shouldn't reach here.");
+        }
+
+        if (currentUsingQueue.isEmpty()) {
+            currentUsingQueueIndex++;
+            if (currentUsingQueueIndex >= queueList.size()) {
+                queueList.add(new IORBQueue());
+            }
+        }
+
+        return iorb;
 
     }
 
@@ -191,6 +226,38 @@ public class Device extends IflDevice
     public void do_cancelPendingIO(ThreadCB thread)
     {
         // your code goes here
+        int count=0;
+        for (count=0; count<queueList.size(); count++){
+            if (!queueList.get(count).isEmpty()){
+                break;
+            }
+        }
+
+        if (count==queueList.size()){ // all queues in queuelist is empty.
+            return;
+        }
+
+        Vector<IORB> vector = iorb_by_thread_list.get(thread);
+
+
+        for (int i=0; i<vector.size(); i++){
+            IORB iorb = vector.get(i);
+
+            iorb.getPage().unlock();
+            iorb.getOpenFile().decrementIORBCount();
+            if(iorb.getOpenFile().getIORBCount() == 0 && iorb.getOpenFile().closePending) {
+                iorb.getOpenFile().close();
+            }
+
+            //remove IORB from all queues.
+            for (int j=0; i<queueList.size(); j++){
+                if (queueList.get(j) != null && !queueList.get(j).isEmpty() && queueList.get(j).contains(iorb)){
+                    queueList.get(i).remove(iorb);
+                }
+            }
+
+        }
+
 
     }
 

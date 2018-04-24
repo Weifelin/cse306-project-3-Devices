@@ -43,7 +43,63 @@ public class DiskInterruptHandler extends IflDiskInterruptHandler
     public void do_handleInterrupt()
     {
         // your code goes here
+        IORB iorb = (IORB) InterruptVector.getEvent();
+        ThreadCB threadCB = iorb.getThread();
+        TaskCB taskCB = threadCB.getTask();
+        OpenFile openFile = iorb.getOpenFile();
+        PageTableEntry pageTableEntry = iorb.getPage();
+        FrameTableEntry frameTableEntry = pageTableEntry.getFrame();
 
+        openFile.decrementIORBCount();
+
+        if (openFile.closePending && openFile.getIORBCount()==0){
+            openFile.close();
+        }
+
+        pageTableEntry.unlock();
+
+//        if (taskCB.getStatus() == TaskLive){
+//            if (iorb.getDeviceID() != SwapDeviceID && threadCB.getStatus() != ThreadKill){
+//                frameTableEntry.setReferenced(true);
+//                if (iorb.getIOType() == FileRead){
+//                    frameTableEntry.setDirty(true);
+//                }
+//            }else {
+//                frameTableEntry.setDirty(false);
+//            }
+//        }
+
+        if (threadCB.getStatus() != ThreadKill && iorb.getDeviceID() != SwapDeviceID){
+            frameTableEntry.setReferenced(true);
+        }
+
+        if (iorb.getDeviceID()!= SwapDeviceID && iorb.getIOType() == FileRead && taskCB.getStatus()!= TaskTerm){
+            frameTableEntry.setDirty(true);
+        }
+
+        if (iorb.getDeviceID()== SwapDeviceID &&  taskCB.getStatus()!= TaskTerm){
+            frameTableEntry.setDirty(false);
+        }
+
+        if (taskCB.getStatus() == TaskTerm){//if task terminated
+            try {
+                if (frameTableEntry.getReserved() == taskCB){
+                    frameTableEntry.setUnreserved(taskCB);
+                }
+            }catch (NullPointerException e){
+                //do nothing.
+            }
+        }
+
+        iorb.notifyThreads();
+        Device.get(iorb.getDeviceID()).setBusy(false);
+        IORB iorb1 = Device.get(iorb.getDeviceID()).dequeueIORB();
+
+        if (iorb1 != null){
+            Device.get(iorb.getDeviceID()).startIO(iorb1);
+        }
+
+        ThreadCB.dispatch();
     }
 
 
