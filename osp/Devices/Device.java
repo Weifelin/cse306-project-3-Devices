@@ -40,14 +40,16 @@ public class Device extends IflDevice
     {
         // your code goes here
         super(id,numberOfBlocks);
-        this.iorbQueue = new GenericList(); //not really use
+        this.iorbQueue = new GenericList();
         currentOpenQueueIndex =0;
         currentUsingQueueIndex =0;
 
-        queueList = new ArrayList<>(4);
-        for (int i=0; i<4; i++){
+        queueList = new ArrayList<>(1);
+        for (int i=0; i<1; i++){
             queueList.add(new IORBQueue());
         }
+
+
     }
 
     /**
@@ -113,10 +115,11 @@ public class Device extends IflDevice
 
         //If the device is busy
         if (threadCB.getStatus() != ThreadKill) {
-           // ((GenericList) iorbQueue).append(iorb);
+           // ((GenericList) queueList).append(iorb);
             IORBQueue currentOpenIORBQueue = null;
             //looking for open queue.
-            for (int i=currentOpenQueueIndex; i< queueList.size(); i++){
+            for (int i=0; i< queueList.size(); i++){
+                //IORBQueue temp = (IORBQueue) ((GenericList)queueList).getAt(i);
                 IORBQueue temp = queueList.get(i);
                 if (temp.isOpen()){
                     currentOpenIORBQueue = temp;
@@ -127,7 +130,8 @@ public class Device extends IflDevice
             if (currentOpenIORBQueue == null){
                 currentOpenIORBQueue = new IORBQueue();
                 queueList.add(currentOpenIORBQueue);
-                currentOpenQueueIndex++;
+                //((GenericList)queueList).append(currentOpenIORBQueue);
+                currentOpenQueueIndex=queueList.size()-1;//last queue would be current open queue.
             }
 
             currentOpenIORBQueue.append(iorb);
@@ -140,6 +144,9 @@ public class Device extends IflDevice
             }else {
                 iorb_by_thread_list.get(iorb.getThread()).addElement(iorb);
             }
+
+            //keep track of iorbQueue
+            ((GenericList)iorbQueue).append(iorb);
 
         }
 
@@ -157,20 +164,44 @@ public class Device extends IflDevice
     {
         // your code goes here
         //picking the current using queue.
-        IORBQueue currentUsingQueue = null;
+        //IORBQueue currentUsingQueue = null;
 
-        for (int i=currentUsingQueueIndex; i< queueList.size(); i++){
-            IORBQueue temp = queueList.get(i);
-            if (!temp.isEmpty()){
-                currentUsingQueue = temp;
-                currentUsingQueueIndex = i;
-                break;
-            }
-        }
+//        for (int i=0; i< queueList.size(); i++){
+//            IORBQueue temp = queueList.get(i);
+//            if (!temp.isEmpty()){
+//                currentUsingQueue = temp;
+//                currentUsingQueueIndex = i;
+//                break;
+//            }
+//        }
 
-        if (currentUsingQueue == null){
-            return null;
+//        if (currentUsingQueue == null){
+//            return null;
+//        }
+        IORBQueue currentUsingQueue = queueList.get(currentUsingQueueIndex);
+
+        if (currentUsingQueue.isEmpty()){
+            currentUsingQueue.open();
+            //currentUsingQueueIndex++;
+
+                int count = -1;
+                for (int i=0; i<queueList.size(); i++){
+                    if (!queueList.get(i).isEmpty()){
+                        currentUsingQueueIndex = i;
+                        currentUsingQueue = queueList.get(currentUsingQueueIndex);
+                        count = i;
+                        break;
+                    }
+                }
+                MyOut.print(count, "count is "+count);
+                if (count == -1){
+                    //all queues are empty
+                    return null;
+                }
+
         }
+        MyOut.print(queueList, "The queueList is "+queueList);
+        MyOut.print(currentUsingQueue, "The currentUsingQueue is "+currentUsingQueue);
 
         //getting IORB from current
         int selected = 0;
@@ -185,11 +216,38 @@ public class Device extends IflDevice
 
         }
 
+
         IORB iorb = (IORB) currentUsingQueue.getAt(selected);
         currentUsingQueue.remove(iorb);
+
+        ((GenericList) iorbQueue).remove(iorb);//keep track of iorbQueue.
+
+        MyOut.print(iorb, "The IORB is "+iorb);
+
         lastCylinder = iorb.getCylinder();
         currentUsingQueue.close();
-        currentOpenQueueIndex++;
+
+        if (currentUsingQueue.isEmpty()){
+            queueList.remove(currentUsingQueue);
+        }
+
+
+        //currentOpenQueueIndex++;
+        if (currentOpenQueueIndex>=queueList.size() || !queueList.get(currentOpenQueueIndex).isOpen()){
+            int count = -1;
+            for (int i=0; i<queueList.size(); i++){
+                if (queueList.get(i).isOpen()){
+                    currentOpenQueueIndex = i;
+                    count = i;
+                    break;
+                }
+            }
+
+            if (count==-1){
+                queueList.add(new IORBQueue());
+                currentOpenQueueIndex = queueList.size()-1;
+            }
+        }
 
 
         //remove the iorb from list
@@ -199,12 +257,7 @@ public class Device extends IflDevice
             MyOut.print(iorb_by_thread_list, "Shouldn't reach here.");
         }
 
-        if (currentUsingQueue.isEmpty()) {
-            currentUsingQueueIndex++;
-            if (currentUsingQueueIndex >= queueList.size()) {
-                queueList.add(new IORBQueue());
-            }
-        }
+
 
         return iorb;
 
@@ -227,7 +280,8 @@ public class Device extends IflDevice
     {
         // your code goes here
         MyOut.print(queueList, "do_cancelPendingIO: QueueList is "+queueList);
-        int count=0;
+
+        int count;
         for (count=0; count<queueList.size(); count++){
             if (!queueList.get(count).isEmpty()){
                 break;
@@ -238,26 +292,58 @@ public class Device extends IflDevice
             return;
         }
 
-        Vector<IORB> vector = iorb_by_thread_list.get(thread);
+        if (thread.getStatus() != ThreadKill){
+            return;
+        }
+
+//        Vector<IORB> vector = iorb_by_thread_list.get(thread);
 
 
-        for (int i=0; i<vector.size(); i++){
-            IORB iorb = vector.get(i);
+//        for (int i=0; i<vector.size(); i++){
+//            IORB iorb = vector.get(i);
+//
+//            iorb.getPage().unlock();
+//            iorb.getOpenFile().decrementIORBCount();
+//            if(iorb.getOpenFile().getIORBCount() == 0 && iorb.getOpenFile().closePending) {
+//                iorb.getOpenFile().close();
+//            }
+//
+//            //remove IORB from all queues.
+//            for (int j=0; i<queueList.size(); j++){
+//                if (queueList.get(j) != null && !queueList.get(j).isEmpty() && queueList.get(j).contains(iorb)){
+//                    queueList.get(i).remove(iorb);
+//                }
+//            }
+//
+//        }
 
-            iorb.getPage().unlock();
-            iorb.getOpenFile().decrementIORBCount();
-            if(iorb.getOpenFile().getIORBCount() == 0 && iorb.getOpenFile().closePending) {
-                iorb.getOpenFile().close();
-            }
+        for (int i=0; i<queueList.size(); i++){
 
-            //remove IORB from all queues.
-            for (int j=0; i<queueList.size(); j++){
-                if (queueList.get(j) != null && !queueList.get(j).isEmpty() && queueList.get(j).contains(iorb)){
-                    queueList.get(i).remove(iorb);
+
+            IORBQueue queue = queueList.get(i);
+            MyOut.print(queue, "Reaching "+i+"th, queue is "+queue);
+            if (!queue.isEmpty()){
+
+                for (int j=0; j<queue.length(); j++){
+                    IORB iorb = (IORB) queue.getAt(j);
+                    if (iorb != null && iorb.getThread().getID() == thread.getID()){
+
+                        ((GenericList)iorbQueue).remove(iorb);
+
+                        MyOut.print(iorb, "IORB to be removed: "+iorb);
+                        iorb.getPage().unlock();
+                        iorb.getOpenFile().decrementIORBCount();
+                        if(iorb.getOpenFile().getIORBCount() == 0 && iorb.getOpenFile().closePending) {
+                            iorb.getOpenFile().close();
+                        }
+
+                        queue.remove(iorb);
+                    }
                 }
             }
-
         }
+
+        MyOut.print(queueList, "after do_cancelPendingIO: QueueList is "+queueList);
 
 
     }
@@ -330,3 +416,4 @@ class IORBQueue extends GenericList{
         return open;
     }
 }
+
