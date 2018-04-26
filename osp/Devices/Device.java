@@ -33,7 +33,7 @@ public class Device extends IflDevice
     private ArrayList<IORBQueue> queueList;
     private int currentUsingQueueIndex;
     private int currentOpenQueueIndex;
-    private static int lastCylinder;
+    private  static int lastCylinder;
     private static ConcurrentHashMap<ThreadCB,Vector<IORB>> iorb_by_thread_list; // for cancelling iorb for thread.
 
     public Device(int id, int numberOfBlocks)
@@ -43,7 +43,7 @@ public class Device extends IflDevice
         this.iorbQueue = new GenericList();
         currentOpenQueueIndex =0;
         currentUsingQueueIndex =0;
-
+        //lastCylinder = 0;
         queueList = new ArrayList<>(1);
         for (int i=0; i<1; i++){
             queueList.add(new IORBQueue());
@@ -178,6 +178,24 @@ public class Device extends IflDevice
 //        if (currentUsingQueue == null){
 //            return null;
 //        }
+        MyOut.print(queueList, "The queueList is "+queueList);
+
+        if (currentUsingQueueIndex >= queueList.size()){
+            int count = -1;
+            for (int i=0; i<queueList.size(); i++){
+                if (!queueList.get(i).isEmpty()){
+                    currentUsingQueueIndex = i;
+                    count = i;
+                    break;
+                }
+            }
+
+            if (count == -1){
+                //all queues are empty
+                return null;
+            }
+        }
+
         IORBQueue currentUsingQueue = queueList.get(currentUsingQueueIndex);
 
         if (currentUsingQueue.isEmpty()){
@@ -200,7 +218,9 @@ public class Device extends IflDevice
                 }
 
         }
-        MyOut.print(queueList, "The queueList is "+queueList);
+
+
+        //MyOut.print(queueList, "The queueList is "+queueList);
         MyOut.print(currentUsingQueue, "The currentUsingQueue is "+currentUsingQueue);
 
         //getting IORB from current

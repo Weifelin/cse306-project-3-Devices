@@ -1,0 +1,67 @@
+Data from Demo:
+DEVICES:
+  Device 0: Swap Device   (mount point: /vm/)
+	    Number of pages read = 1232
+	    Number of pages written = 307
+	    Average number of cylinders swept per disk access = 7
+	      Total number of cylinders swept = 11229
+	    Service time per I/O request: 775
+  Device 1: Disk   (mount point: /etc/go/)
+	    Number of pages read = 29
+	    Number of pages written = 30
+	    Average number of cylinders swept per disk access = 2
+	      Total number of cylinders swept = 130
+	    Service time per I/O request: 381
+  Device 2: Disk   (mount point: /etc/)
+	    Number of pages read = 11
+	    Number of pages written = 11
+	    Average number of cylinders swept per disk access = 1
+	      Total number of cylinders swept = 18
+	    Service time per I/O request: 892
+
+TASKS and THREADS:
+  CPU Utilization: 58.529198%
+  Average service time per thread: 28761.113
+
+  ------------------------------------------------------------------------------------------
+Date from my implementation
+  DEVICES:
+    Device 0: Swap Device   (mount point: /vm/)
+  	    Number of pages read = 1571
+  	    Number of pages written = 391
+  	    Average number of cylinders swept per disk access = 4
+  	      Total number of cylinders swept = 8346
+  	    Service time per I/O request: 680
+    Device 1: Disk   (mount point: /etc/go/)
+  	    Number of pages read = 33
+  	    Number of pages written = 48
+  	    Average number of cylinders swept per disk access = 2
+  	      Total number of cylinders swept = 144
+  	    Service time per I/O request: 216
+    Device 2: Disk   (mount point: /etc/)
+  	    Number of pages read = 15
+  	    Number of pages written = 11
+  	    Average number of cylinders swept per disk access = 2
+  	      Total number of cylinders swept = 58
+  	    Service time per I/O request: 731
+
+  TASKS and THREADS:
+    CPU Utilization: 72.948006%
+    Average service time per thread: 28863.96
+    ----------------------------------------------------------------------------------------
+
+    For device 0, Demo has total number of cylinders swept of 11229 and the average per request is 7, while my implementation has 8346 and 4.
+    For device 1, Demo has total number of cylinders swept of 130 and the average per request is 2,  while my implenmentation has 144 and 2.
+    For device 2, Demo has total number of cylinders swept of 18  and the average per request is 1,  while my implenmentation has 58 and 2.
+    Since shorstest seek time first is implemented, the closest clylinder will be choosed so the possibility
+    to swicth to another cylinder is greatly lowered. The difference is more significant in device 0 because
+    device 0 is responsible for more ovbious. Note that, since demo has fewer read in device 1 and 2 than my implementation and the number of read
+    is not big enough to show the advantage of SSTF, the total number of clyinders swept in these cases are a little bit smaller than my implementation
+
+    The advantages of SSTF shows in the service time per I/O request, since the seek time is reduced due to SSTF,
+    the service time is therefore reduced.
+
+    There are 1272 reads and 348 writes for demo. My implementation has 1619 reads and 450 writes. Due to the
+    improvement of efficiency, the throughput is increased. This can be shown in CPU utilization too. More
+    CPU resources can be put into threads due to faster response from Disk.
+
